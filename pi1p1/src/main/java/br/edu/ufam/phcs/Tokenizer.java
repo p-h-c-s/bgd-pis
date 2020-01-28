@@ -32,7 +32,7 @@ public class Tokenizer {
     StringTokenizer itr = new StringTokenizer(input);
     while (itr.hasMoreTokens()) {
       String w = PATTERN.matcher(itr.nextToken().toLowerCase()).replaceAll("");
-      if (w.length() != 0) {
+      if (w.length() != 0 && w.matches("[A-Za-z]+")) {
         tokens.add(w);
       }
     }

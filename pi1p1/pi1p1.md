@@ -9,13 +9,11 @@
 ### Questão 3 
 * 28716 palavras únicas.
 
-## Obs: O código já possui uma regex no Tokenizer.java. Então adicionar a regex proposta não mudou o resultado.
-
 ### Questão 4
-* a- breeding -> 2 ocorrências
+* aaron -> 96 ocorrências
 
 ### Questão 5
-* zed -> 1 ocorrência
+* zeals -> 1 ocorrência
 
 ### Questão 6 
-* 28716 palavras únicas.
+* 21882 palavras únicas.
