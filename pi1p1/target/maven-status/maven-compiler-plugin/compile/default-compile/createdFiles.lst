@@ -1,0 +1,8 @@
+br/edu/ufam/phcs/App.class
+br/edu/ufam/phcs/Tokenizer.class
+br/edu/ufam/phcs/WordCount.class
+br/edu/ufam/phcs/WordCount$MyMapper.class
+br/edu/ufam/phcs/WordCount$MyReducer.class
+br/edu/ufam/phcs/WordCount$MyMapperIMC.class
+br/edu/ufam/phcs/WordCount$Args.class
+br/edu/ufam/phcs/WordCount$1.class
