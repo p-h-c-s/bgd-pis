@@ -1,0 +1,1 @@
+RODAR 'fromdos data/amazon-meta.txt' se baixar o arquivo pela primeira vez. ele usa CLRF. esse comando traduz pra LF
