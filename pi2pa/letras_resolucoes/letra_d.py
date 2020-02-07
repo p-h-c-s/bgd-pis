@@ -1,5 +1,5 @@
 import re
-from heapq import nlargest
+from heapq import nsmallest
 from operator import itemgetter
 from pyspark import SparkContext, SparkConf
 appName = 'bgd'
@@ -21,5 +21,5 @@ stripped = asi.map(lambda s: [elem.replace(" ","") for elem in s])
 
 pairs = stripped.map(lambda p: (p[3][6:], (p[1][5:], int(p[4][10:]))))
 # o itemgetter(0) escolhe qual campo comparar
-groups = pairs.groupByKey().flatMap(lambda g: (g[0] ,nlargest(10, g[1], key = itemgetter(1))))
+groups = pairs.groupByKey().flatMap(lambda g: (g[0] ,nsmallest(10, g[1], key = itemgetter(1))))
 print(groups.collect())
