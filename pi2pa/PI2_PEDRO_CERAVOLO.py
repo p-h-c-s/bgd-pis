@@ -1,11 +1,12 @@
 import re
+import sys
 from heapq import nsmallest,nlargest
 from operator import itemgetter
 from itertools import accumulate
 from pyspark import SparkContext, SparkConf
 appName = 'bgd'
 
-path_to_file = input('insira o path para o arquivo de entrada: ')
+path_to_file = sys.argv[1]
 
 conf = SparkConf().setAppName(appName).setMaster('local')
 conf.set("spark.executor.memory","2G")
