@@ -1,0 +1,1 @@
+gsutil cp -r gs://la-gcp-labs-resources/data-engineer/dataproc/* .

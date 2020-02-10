@@ -1,0 +1,1 @@
+gsutil cp -r ../../pi2pa/data/amazon-meta.txt gs://pedro-bucket-1

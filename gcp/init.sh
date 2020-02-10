@@ -1,0 +1,13 @@
+gcloud dataproc clusters create pedro-santos-1203 \
+--project ufam-bgd-2020-267800 \
+--region us-central1 \
+--subnet default \
+--zone us-central1-c \
+--master-machine-type n1-standard-1 \
+--master-boot-disk-size 32 \
+--num-workers 3 \
+--worker-machine-type n1-standard-1 \
+--worker-boot-disk-size 32 \
+--image-version 1.4-ubuntu18 \
+--optional-components ANACONDA,JUPYTER \
+--bucket pedro-bucket-1 \

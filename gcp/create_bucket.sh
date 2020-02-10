@@ -1,0 +1,1 @@
+gsutil mb -c standard -l us-central1 gs://pedro-bucket-1
