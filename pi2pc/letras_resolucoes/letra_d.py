@@ -10,12 +10,13 @@ from pyspark.sql.window import Window
 from pyspark.sql.functions import rank, col
 
 appName = 'bgd'
-sc = SparkContext()
+conf = SparkConf().setAppName(appName).setMaster('local')
+sc = SparkContext(conf=conf)
 sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
-file = sc.textFile('../pi2pa/data/teste.txt')
+file = sc.textFile('../pi2pa/data/amazon-meta.txt')
 
 
 def customPrintD(data):
@@ -27,7 +28,7 @@ def customPrintD(data):
 def create_obj(array):
     obj = {}
     obj[array[0][0]] = int(array[0][1].strip())  # Id
-    obj[array[1][0]] = array[1][1]  # ASIN
+    obj[array[1][0]] = array[1][1].strip()  # ASIN
 
     title = ''
     for til in array[2][1:-2]:
@@ -35,7 +36,6 @@ def create_obj(array):
     title += array[2][-1]
     obj[array[2][0].strip()] = title  # title
 
-    # print(array)
     obj[array[3][0].strip()] = array[3][1].strip()  # group
     obj[array[4][0].strip()] = int(array[4][1].strip())  # salesrank
 
@@ -47,16 +47,15 @@ def create_obj(array):
         obj[array[6][0].strip()].append(array[i+7][0].strip())
 
     skip = 8+n_categories
-    n_reviews = int(array[7+n_categories][1].replace(' ', '').split(':')[1][0])
     obj['reviews'] = []
-    # print(n_reviews)
-    for i in range(0, n_reviews):
+    for i in range(skip, (len(array)-1)):
+        # print(array[skip+1][0].strip().split()[0])
         obj['reviews'].append({
-            'date': array[skip+i][0].strip().split()[0],
-            'customer': array[skip+i][1].strip().split()[0],
-            'rating': int(array[skip+i][1].strip().split()[2]),
-            'votes': int(array[skip+i][1].strip().split()[4]),
-            'helpful': int(array[skip+i][1].strip().split()[6])
+            'date': array[i][0].strip().split()[0],
+            'customer': array[i][1].strip().split()[0],
+            'rating': int(array[i][1].strip().split()[2]),
+            'votes': int(array[i][1].strip().split()[4]),
+            'helpful': int(array[i][1].strip().split()[6])
         })
 
     return obj
@@ -90,6 +89,8 @@ print('\n\n')
 print(df.printSchema())
 print('\n')
 
-window = Window.partitionBy(df['group']).orderBy(df['salesrank'].asc())
+df = df.where('salesrank >= 0')
 
-df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show()
+window = Window.partitionBy(df['group']).orderBy(['salesrank', 'ASIN'])
+
+df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show(n=50)
