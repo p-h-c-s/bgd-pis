@@ -7,19 +7,19 @@ from pyspark.sql import SparkSession, functions
 from pyspark.sql.types import *
 
 from pyspark.sql.window import Window
-from pyspark.sql.functions import rank, col, udf, explode
+from pyspark.sql.functions import rank, col, udf, explode, count, desc
 
 
 appName = 'bgd'
 
-conf = SparkConf().setAppName(appName).setMaster('local')
+conf = SparkConf().setAppName(appName)
 conf.set("spark.executor.memory","2G")
 sc = SparkContext(conf=conf)
 sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
-file = sc.textFile('../pi2pa/data/teste.txt')
+file = sc.textFile('../pi2pa/data/amazon-meta.txt')
 
 # positiva e com rating = 5
 # pegar cada produto, calcular a media de review e pegar com 10 maiores na heapq
@@ -91,16 +91,10 @@ custudf = udf(lambda x: [b['customer'] for b in x], ArrayType(StringType()))
 new_df = df.withColumn('customer', custudf(df.reviews))
 exploded = new_df.withColumn('customer', explode(new_df.customer))
 
-custDf = exploded.select('customer')
+df_count = exploded.groupBy('group', 'customer').agg(count('customer').alias('frequencia'))
+# print(df_count.show(n=50))
+window = Window.partitionBy('group').orderBy(desc('frequencia'), 'customer')
 
-print(exploded.show())
+df_final = df_count.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10)
 
-# window = Window.partitionBy('group')
-
-
-
-# calcUDf = udf(calcAverage, FloatType())
-
-# dfRevs = df.withColumn('averageHelpful', calcUDf(df.reviews))
-# dfRevs = dfRevs.orderBy(functions.col('averageHelpful').desc()).limit(10)
-# dfRevs.show()
+print(df_final.show(n=50))
