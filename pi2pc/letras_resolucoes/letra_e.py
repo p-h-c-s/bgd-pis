@@ -1,22 +1,28 @@
 import re
-from heapq import nsmallest
+from heapq import nlargest
 from operator import itemgetter
 from pyspark import SparkContext, SparkConf
 
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, functions
 from pyspark.sql.types import *
 
 from pyspark.sql.window import Window
-from pyspark.sql.functions import rank, col
+from pyspark.sql.functions import rank, col, udf
+
 
 appName = 'bgd'
+
 conf = SparkConf().setAppName(appName).setMaster('local')
+conf.set("spark.executor.memory","2G")
 sc = SparkContext(conf=conf)
 sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
 file = sc.textFile('../pi2pa/data/amazon-meta.txt')
+
+# positiva e com rating = 5
+# pegar cada produto, calcular a media de review e pegar com 10 maiores na heapq
 
 def create_obj(array):
     obj = {}
@@ -53,11 +59,6 @@ def create_obj(array):
 
     return obj
 
-filtered = file.filter(lambda l: not (('  discontinued' in l) or l.startswith('#') or l.startswith("Total")))
-arrays = filtered.map(lambda line: line.split('\n'))
-pre_objects = arrays.map(lambda obj: [key.split(':', 1) for key in obj])
-products = pre_objects.map(create_obj)
-
 # raw dataframe api (nosql)
 # https://spark.apache.org/docs/2.1.0/api/python/pyspark.sql.html#pyspark.sql.DataFrame
 
@@ -75,14 +76,24 @@ schemaRaw = [('Id', IntegerType()),
 fields = [StructField(field[0], field[1], True) for field in schemaRaw]
 schema = StructType(fields)
 
+def calcAverage(reviews):
+  avgRating = 0
+  if len(reviews) > 0:
+    for r in reviews:
+      if(int(r['rating']) >= 5):
+        avgRating += int(r['helpful'])
+    return avgRating/len(reviews)
+  return 0.0
+
+filtered = file.filter(lambda l: not (('  discontinued' in l) or l.startswith('#') or l.startswith("Total")))
+arrays = filtered.map(lambda line: line.split('\n'))
+pre_objects = arrays.map(lambda obj: [key.split(':', 1) for key in obj])
+products = pre_objects.map(create_obj)
+
 df = products.toDF(schema)
 
-print('\n\n')
-print(df.printSchema())
-print('\n')
+calcUDf = udf(calcAverage, FloatType())
 
-df = df.where('salesrank >= 0')
-
-window = Window.partitionBy(df['group']).orderBy(['salesrank', 'ASIN'])
-
-df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show(n=50)
+dfRevs = df.withColumn('averageHelpful', calcUDf(df.reviews))
+dfRevs = dfRevs.orderBy(functions.col('averageHelpful').desc()).limit(10)
+dfRevs.show()
