@@ -19,7 +19,7 @@ sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
-file = sc.textFile('../pi2pa/data/teste.txt')
+file = sc.textFile('../pi2pa/data/amazon-meta.txt')
 
 # positiva e com rating = 5
 # pegar cada produto, calcular a media de review e pegar com 10 maiores na heapq
@@ -112,7 +112,7 @@ FROM (
             SELECT group, new_reviews.customer
             FROM products
             LATERAL VIEW explode(reviews) exploded_reviews AS new_reviews
-) GROUP BY group,customer ORDER BY count(customer) DESC LIMIT 10)) jobs 
-
+) GROUP BY group,customer ORDER BY count(customer)))
+WHERE rank <= 10 
 """
-).show()
+).show(n=200)
