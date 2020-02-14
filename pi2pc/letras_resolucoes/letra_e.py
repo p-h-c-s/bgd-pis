@@ -19,7 +19,7 @@ sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
-file = sc.textFile('../pi2pa/data/amazon-meta.txt')
+file = sc.textFile('../pi2pa/data/teste.txt')
 
 # positiva e com rating = 5
 # pegar cada produto, calcular a media de review e pegar com 10 maiores na heapq
@@ -95,5 +95,19 @@ df = products.toDF(schema)
 calcUDf = udf(calcAverage, FloatType())
 
 dfRevs = df.withColumn('averageHelpful', calcUDf(df.reviews))
+dfRevs.show()
 dfRevs = dfRevs.orderBy(functions.col('averageHelpful').desc()).limit(10)
 dfRevs.show()
+
+# Com views:
+print('\n\n-----------------\n Utilizando views:')
+products.toDF(schema).createOrReplaceTempView("products")
+spark.sql(""" 
+  SELECT ASIN, avg(helpful) FROM (
+    SELECT ASIN, new_reviews.helpful
+    FROM products
+    LATERAL VIEW explode(reviews) exploded_reviews AS new_reviews
+    WHERE new_reviews.rating >= 5
+  ) GROUP BY (asin) ORDER BY avg(helpful) DESC LIMIT 10
+"""
+).show(n=50)
