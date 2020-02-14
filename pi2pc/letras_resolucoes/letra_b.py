@@ -77,18 +77,19 @@ schemaRaw = [('Id', IntegerType()),
 fields = [StructField(field[0], field[1], True) for field in schemaRaw]
 schema = StructType(fields)
 
-product = 1558608915
+product = 'B00004R99S'
 
 filtered = file.filter(lambda l: not (('  discontinued' in l) or l.startswith('#') or l.startswith("Total")))
 arrays = filtered.map(lambda line: line.split('\n'))
 pre_objects = arrays.map(lambda obj: [key.split(':', 1) for key in obj])
 products = pre_objects.map(create_obj)
 
+
+print('Com dataframes')
 df = products.toDF(schema)
 selectedProductSalesRank = df.filter(df.ASIN == product).collect()[0].salesrank
-
 similars = df.select(df.ASIN, df.salesrank, explode(df.similar).alias('similar'))
-similars = similars.filter(similars.salesrank < selectedProductSalesRank).filter(similars.similar == product).select(similars.ASIN, similars.salesrank)
+similars = similars.filter(similars.salesrank > selectedProductSalesRank).where(similars.similar == product)
 similars.show(n=50)
 
 # Como view
@@ -100,7 +101,7 @@ spark.sql("""
         SELECT ex_similars, salesrank
         FROM products
         LATERAL VIEW explode(similar) exploded_similars AS ex_similars
-        WHERE ASIN={}
+        WHERE ASIN='{}'
     ) as similars JOIN products ON products.ASIN=similars.ex_similars
     WHERE similars.salesrank < products.salesrank
 """.format(product)
