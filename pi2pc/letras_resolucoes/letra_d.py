@@ -81,7 +81,7 @@ df = df.where('salesrank >= 0')
 
 window = Window.partitionBy(df['group']).orderBy(['salesrank', 'ASIN'])
 
-df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show(n=50)
+df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show(n=100)
 
 # Como view
 print('\n\n-----------------\n Utilizando views:')
@@ -89,9 +89,9 @@ products.toDF(schema).createOrReplaceTempView("products")
 spark.sql(""" 
 SELECT * 
     FROM (
-        SELECT *, rank() OVER (PARTITION BY products.group ORDER BY products.salesrank ASC) as rank 
-    FROM PRODUCTS) jobs 
+        SELECT *, rank() OVER (PARTITION BY products.group ORDER BY products.salesrank ASC, products.ASIN ASC) as rank 
+    FROM PRODUCTS WHERE salesrank >= 0) jobs 
     WHERE 
-        rank <= 10 AND salesrank != -1
+        rank <= 10
 """
-).show(n=50)
+).show(n=100)
