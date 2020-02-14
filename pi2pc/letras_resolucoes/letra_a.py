@@ -7,7 +7,7 @@ from pyspark.sql import SparkSession, functions
 from pyspark.sql.types import *
 
 from pyspark.sql.window import Window
-from pyspark.sql.functions import rank, col, udf, explode, count, desc, posexplode
+from pyspark.sql.functions import rank, col, udf, explode, count, desc, asc, posexplode
 
 
 appName = 'bgd'
@@ -19,7 +19,7 @@ sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n")
 
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
-file = sc.textFile('../pi2pa/data/teste.txt')
+file = sc.textFile('../pi2pa/data/amazon-meta.txt')
 
 # positiva e com rating = 5
 # pegar cada produto, calcular a media de review e pegar com 10 maiores na heapq
@@ -100,7 +100,6 @@ schema = StructType(fields)
 df = products.toDF(schema)
 
 product = '0738700797'
-print(df.show())
 reviews = df.filter(df.ASIN == product).select(explode(df.reviews).alias('reviews'))
 reviews = reviews.withColumn('customer', reviews.reviews.customer)
 reviews = reviews.withColumn('helpful', reviews.reviews.helpful)
@@ -109,3 +108,28 @@ reviews = reviews.withColumn('date', reviews.reviews.date)
 reviews = reviews.withColumn('votes', reviews.reviews.votes)
 reviews.orderBy(reviews.helpful.desc(), reviews.rating.desc()).limit(5).show()
 reviews.orderBy(reviews.helpful.desc(), reviews.rating.asc()).limit(5).show()
+
+# Como view
+print('\n\n-----------------\n Utilizando views: 5 comentários mais úteis e com maior avaliação')
+products.toDF(schema).createOrReplaceTempView("products")
+spark.sql(""" 
+  SELECT * FROM (
+    SELECT new_reviews.date, new_reviews.customer, new_reviews.helpful, new_reviews.rating
+    FROM products
+    LATERAL VIEW explode(reviews) exploded_reviews AS new_reviews
+    WHERE ASIN={}
+  ) ORDER BY helpful DESC, rating DESC LIMIT 5
+""".format(product)
+).show(n=50)
+
+print('\n\n-----------------\n Segunda query: 5 comentários mais úteis e com menor avaliação')
+products.toDF(schema).createOrReplaceTempView("products")
+spark.sql(""" 
+  SELECT * FROM (
+    SELECT new_reviews.date, new_reviews.customer, new_reviews.helpful, new_reviews.rating
+    FROM products
+    LATERAL VIEW explode(reviews) exploded_reviews AS new_reviews
+    WHERE ASIN={}
+  ) ORDER BY helpful DESC, rating ASC LIMIT 5
+""".format(product)
+).show(n=50)
