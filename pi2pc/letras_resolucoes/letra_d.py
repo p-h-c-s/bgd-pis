@@ -77,12 +77,21 @@ schema = StructType(fields)
 
 df = products.toDF(schema)
 
-print('\n\n')
-print(df.printSchema())
-print('\n')
-
 df = df.where('salesrank >= 0')
 
 window = Window.partitionBy(df['group']).orderBy(['salesrank', 'ASIN'])
 
 df.select('*', rank().over(window).alias('rank')).filter(col('rank') <= 10).show(n=50)
+
+# Como view
+print('\n\n-----------------\n Utilizando views:')
+products.toDF(schema).createOrReplaceTempView("products")
+spark.sql(""" 
+SELECT * 
+    FROM (
+        SELECT *, rank() OVER (PARTITION BY products.group ORDER BY products.salesrank ASC) as rank 
+    FROM PRODUCTS) jobs 
+    WHERE 
+        rank <= 10 AND salesrank != -1
+"""
+).show(n=50)
