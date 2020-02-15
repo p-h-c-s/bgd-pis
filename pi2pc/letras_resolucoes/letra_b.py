@@ -96,12 +96,12 @@ similars.show(n=50)
 print('\n\n-----------------\n Produtos similares com salesrank maior que {}'.format(product))
 products.toDF(schema).createOrReplaceTempView("products")
 spark.sql(""" 
-    SELECT ex_similars, ASIN, title, products.salesrank FROM
+    SELECT  similars.ASIN, similars.salesrank, ex_similars, products.salesrank FROM
     (
-        SELECT ex_similars, salesrank
+        SELECT products.ASIN, salesrank, ex_similars
         FROM products
         LATERAL VIEW explode(similar) exploded_similars AS ex_similars
-        WHERE ASIN='{}'
+        WHERE products.ASIN='{}'
     ) as similars JOIN products ON products.ASIN=similars.ex_similars
     WHERE similars.salesrank < products.salesrank
 """.format(product)

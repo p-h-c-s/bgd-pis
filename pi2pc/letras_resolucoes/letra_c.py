@@ -92,7 +92,7 @@ df = products.toDF(schema)
 product = '0486220125'
 
 sum_udf = udf(lambda x: functools.reduce(add, x), IntegerType())
-
+print('\n\n-----------------\n Evolução das avaliações de {}'.format(product))
 reviews = df.filter(df.ASIN == product).select(explode(df.reviews).alias('reviews'))
 reviews = reviews.withColumn('customer', reviews.reviews.customer)
 reviews = reviews.withColumn('helpful', reviews.reviews.helpful.cast(IntegerType()))
@@ -106,3 +106,19 @@ df = df.withColumn('cumulativeQuant', sum_udf(collect_list(df.quant).over(Window
 df = df.withColumn('avgRating', (df.cumulativeRating / df.cumulativeQuant).cast(IntegerType()))
 df = df.select(df.date, df.avgRating)
 df.show(len(df.collect()))
+
+# Como view
+print('\n Utilizando views')
+print('\n\n-----------------\n Evolução das avaliações de {}'.format(product))
+products.toDF(schema).createOrReplaceTempView("products")
+spark.sql(""" 
+SELECT date, 
+        AVG(rating) OVER(ORDER BY date ROWS BETWEEN unbounded preceding AND CURRENT ROW) rating
+    FROM (
+        SELECT exploded_reviews.date, exploded_reviews.rating
+        FROM products
+        LATERAL VIEW explode(reviews) exploded_reviews AS exploded_reviews
+        WHERE ASIN='{}'
+    )
+""".format(product)
+).show(n=50)

@@ -99,9 +99,24 @@ df = products.toDF(schema)
 calcSum = udf(calcSumHelpful, IntegerType())
 calcQuant = udf(calcQuantRating, IntegerType())
 
-df = df.select(df.group, df.reviews)
-df = df.withColumn('sum', calcSum(df.reviews)).withColumn('quant', calcQuant(df.reviews)).select(df.group, 'sum', 'quant')
-df = df.groupBy(df.group).agg({'sum': 'sum', 'quant': 'sum'})
-df = df.withColumn('avgRating', df['sum(sum)'] / df['sum(quant)']).select(df.group, 'avgRating')
-df = df.orderBy(df.avgRating.desc()).limit(5)
-df.show(len(df.collect()))
+# print('Com dataframes')
+# df = df.select(df.group, df.reviews)
+# df = df.withColumn('sum', calcSum(df.reviews)).withColumn('quant', calcQuant(df.reviews)).select(df.group, 'sum', 'quant')
+# df = df.groupBy(df.group).agg({'sum': 'sum', 'quant': 'sum'})
+# df = df.withColumn('avgRating', df['sum(sum)'] / df['sum(quant)']).select(df.group, 'avgRating')
+# df = df.orderBy(df.avgRating.desc()).limit(5)
+# df.show(len(df.collect()))
+
+print('\n\nCom views')
+df.createOrReplaceTempView("products")
+spark.sql("""
+  SELECT category, AVG(helpful) FROM(
+    SELECT category, helpful FROM (
+      SELECT categories, new_reviews.helpful
+      FROM products
+      LATERAL VIEW explode(reviews) exploded_reviews AS new_reviews
+      WHERE new_reviews.rating >= 5
+    )
+    LATERAL VIEW explode(categories) exploded_categories AS category
+  ) GROUP BY (category) ORDER BY AVG(helpful) DESC LIMIT 5
+""").show()

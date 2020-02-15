@@ -99,6 +99,7 @@ schema = StructType(fields)
 
 df = products.toDF(schema)
 
+print('Resultado utilizando dataframes')
 product = '0738700797'
 reviews = df.filter(df.ASIN == product).select(explode(df.reviews).alias('reviews'))
 reviews = reviews.withColumn('customer', reviews.reviews.customer)
