@@ -14,13 +14,16 @@ proc_data = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quot
 
 test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
 
+raw_groups = list(zip(proc_data.data, proc_data.target.tolist()))
+raw_groups[:] = [x for x in raw_groups if (len(x[0].replace('\n', '')) > 0)]
+
 # min 246 max 250
 maxI = 249
 minI = 246
 def vectorizeDF(raw):
-  raw = spark.createDataFrame(zip(proc_data.data[minI:maxI], proc_data.target.tolist()[minI:maxI]), schema=['data', 'target'])
-  removeNewLine = udf(lambda data: len(data.replace('\n', '')) > 0, BooleanType())
-  raw = raw.filter(removeNewLine(col('data')))
+  raw = spark.createDataFrame(raw_groups, schema=['data', 'target'])
+
+
   tokenizer = Tokenizer(inputCol='data', outputCol='tokens')
   tok_data = tokenizer.transform(raw)
 
@@ -35,21 +38,25 @@ def vectorizeDF(raw):
   feat_data = feat_data.filter(checkZero(col('features')))
   return feat_data
 
-checkZero = udf(lambda V: V.numNonzeros(), IntegerType())
 
 train = vectorizeDF(proc_data)
-teste = vectorizeDF(test_data)
+# teste = vectorizeDF(test_data)
 
-print(train.select('features').show())
 
 # feat_data.select('rawFeatures', 'target').show()
 mh = MinHashLSH(inputCol='features', outputCol='hashes', seed = 12345)
 model = mh.fit(train)
-# model.transform(train)
+model.transform(train)
 
+# train = dataA = [(0, Vectors.sparse(2,[0],[9.0]),),
+#          (2, Vectors.sparse(2,[0,1],[84.0,14.0]),)]
+# train = spark.createDataFrame(dataA, ["id", "features"])
 
-
-testKey = teste.take(1)[0]['features']
-# print('teste: ', testKey)
+# testKey = teste.take(1)[0]['features']
+key = Vectors.sparse(2,[0],[9.0])
+train = train.select('features')
+train.show(truncate = False)
+print(train.dtypes)
+print(key)
 # # # train.withColumn('new', checkZero(col('features'))).select('new', 'features').where(col('new') == 0).show()
-model.approxNearestNeighbors(train, testKey, 2).show()
+model.approxNearestNeighbors(train, key, 2).show()

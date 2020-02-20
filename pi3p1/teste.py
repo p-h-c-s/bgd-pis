@@ -7,20 +7,16 @@ from pyspark.sql import SparkSession, functions
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
 
-dataA = [(0, Vectors.sparse(6, [0, 1, 2], [0,1, 1]),),
-         (1, Vectors.sparse(6, [2, 3, 4], [1.0, 1.0, 1.0]),),
-         (2, Vectors.sparse(6, [0, 2, 4], [1.0, 1.0, 1.0]),)]
+dataA = [(0, Vectors.sparse(2,[0],[9.0]),),
+         (2, Vectors.sparse(2,[0,1],[84.0,14.0]),)]
 dfA = spark.createDataFrame(dataA, ["id", "features"])
 
-dataB = [(3, Vectors.sparse(6, [1, 3, 5], [1.0, 1.0, 1.0]),),
-         (4, Vectors.sparse(6, [2, 3, 5], [1.0, 1.0, 1.0]),),
-         (5, Vectors.sparse(6, [1, 2, 4], [1.0, 1.0, 1.0]),)]
-dfB = spark.createDataFrame(dataB, ["id", "features"])
-
-key = Vectors.sparse(6, [1, 3], [1.0, 1.0])
+key = Vectors.sparse(2, [0, 1], [1.0, 1.0])
 
 mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
 model = mh.fit(dfA)
+
+print(dfA.dtypes)
 
 # Feature Transformation
 print("The hashed dataset where hashed values are stored in the column 'hashes':")
