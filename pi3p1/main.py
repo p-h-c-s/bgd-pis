@@ -4,6 +4,7 @@ from pyspark.sql.functions import *
 from pyspark.ml.linalg import Vectors
 from pyspark.sql.types import *
 from pyspark.ml.feature import Tokenizer, StopWordsRemover, CountVectorizer, Word2Vec, MinHashLSH
+import math
 
 from pprint import pprint
 # os indices estão alinhados: o valor data[1] e o filename[1] com o target[1]
@@ -14,24 +15,13 @@ proc_data = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quot
 
 test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
 
-maxI = 70
-minI = 50
-
+maxI = 100
+minI = 90
+# o erro acontece em posicoes que foram filtradas???????????????????????????
 raw_groups = list(zip(proc_data.data[minI:maxI], proc_data.target.tolist()[minI:maxI]))
 raw_groups[:] = [x for x in raw_groups if (len(x[0].replace('\n', '')) > 0)]
 
 # min 246 max 250
-
-# ver se tem pelo menos um hash igual. se tiver, usar a keyDist
-# vect2 por exemplo e o vetor de teste
-def keyDist(vect1, vect2):
-  set1 = set(vect1)
-  set2 = set(vect2)
-  intersect = float(len(set1.intersection(set2)))
-  union = float(len(set1.union(set2)) - intersect)
-  return 1 - intersect/union
-
-
 def vectorizeDF(raw):
   raw = spark.createDataFrame(raw_groups, schema=['data', 'target'])
   raw = raw.withColumn('id', monotonically_increasing_id())
@@ -52,35 +42,70 @@ def vectorizeDF(raw):
 
 
 train = vectorizeDF(proc_data)
+train.select('id', 'features').show()
 # teste = vectorizeDF(test_data)
 
 
-# feat_data.select('rawFeatures', 'target').show()
-mh = MinHashLSH(inputCol='features', outputCol='hashes', seed = 12345)
+# # feat_data.select('rawFeatures', 'target').show()
+mh = MinHashLSH(inputCol='features', outputCol='hashes', numHashTables=1, seed = 12345)
 model = mh.fit(train)
 train = model.transform(train)
 
-# dataA = [(0, Vectors.sparse(10,[0,2,3,5,6,8,9],[7.0,4.0,3.0,2.0,1.0,2.0,2.0]),),
-#          (2, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
-#          (3, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
-#          (4, Vectors.sparse(10,[0,1,4,7],[29.0,4.0,3.0,2.0]),)]
-# dfA = spark.createDataFrame(dataA, ["id", "features"])
+extractExploded = udf(lambda l: float(l[0]), FloatType())
+# extract hash values from matrix
+train = train.select('id', 'features', 'target',  explode('hashes').alias('hashes'))
+# cast hash values to float then extract from denseVector
+train = train.withColumn('extracted', extractExploded(col('hashes')))
 
-train.select('target', 'hashes').show()
-# testKey = teste.take(1)[0]['features']
 
-# ideia - > inserir as keys de treino no vetor de train. Mas na hora de calcular a keyDist separar (so para ter um hash)
-# key = Vectors.sparse(10,[0],[9.0])
 
-teste = train.select('features', 'hashes', 'target').where('id < 10')
+# # dataA = [(0, Vectors.sparse(10,[0,2,3,5,6,8,9],[7.0,4.0,3.0,2.0,1.0,2.0,2.0]),),
+# #          (2, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
+# #          (3, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
+# #          (4, Vectors.sparse(10,[0,1,4,7],[29.0,4.0,3.0,2.0]),)]
+# # dfA = spark.createDataFrame(dataA, ["id", "features"])
+
+
+# # ideia - > inserir as keys de treino no vetor de train. Mas na hora de calcular a keyDist separar (so para ter um hash)
+# # key = Vectors.sparse(10,[0],[9.0])
+
+teste = train.select('id','features', 'extracted', 'target').where('id < 5')
+print('dados de teste')
 teste.show()
 
-train = train.select('features', 'hashes', 'target').where('id > 10')
+train = train.select('id', 'features', 'extracted', 'target').where('id >= 5')
+print('dados de treino')
 train.show()
 
 teste_1 = teste.take(1)
+teste_1_feat = teste_1[0]['features']
+teste_1 = float(teste_1[0]['extracted'])
 
+print(teste_1_feat)
 print(teste_1)
+
+
+print('hashEncounters com {}'.format(teste_1))
+# assumindo que o spark sabe comparar floats de maneira decente
+hashEncounters = train.where('extracted == {}'.format(teste_1))
+hashEncounters.show()
+
+
+# ver se tem pelo menos um hash igual. se tiver, usar a keyDist
+# vect2 por exemplo e o vetor de teste
+def keyDist(vect1, vect2):
+  set1 = set(vect1)
+  set2 = set(vect2)
+  intersect = float(len(set1.intersection(set2)))
+  union = float(len(set1.union(set2)) - intersect)
+  return 1 - intersect/union
+
+def distAux(keyFeat):
+  return udf(lambda l: keyDist(l, keyFeat), DoubleType())
+
+dists = hashEncounters.withColumn('distCol', distAux(teste_1_feat)(col('features')))
+
+dists.show()
 
 # fluxo: 
 #   1 - testar se tem pelo menos um hash igual em hashes
