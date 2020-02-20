@@ -7,11 +7,13 @@ from pyspark.sql import SparkSession, functions
 spark = SparkSession.builder.appName('bgd').getOrCreate()
 
 
-dataA = [(0, Vectors.sparse(2,[0],[9.0]),),
-         (2, Vectors.sparse(2,[0,1],[84.0,14.0]),)]
+dataA = [(0, Vectors.sparse(10,[0,2,3,5,6,8,9],[7.0,4.0,3.0,2.0,1.0,2.0,2.0]),),
+         (2, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
+         (3, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
+         (4, Vectors.sparse(10,[0,1,4,7],[29.0,4.0,3.0,2.0]),)]
 dfA = spark.createDataFrame(dataA, ["id", "features"])
 
-key = Vectors.sparse(2, [0, 1], [1.0, 1.0])
+key = Vectors.sparse(10,[0],[9.0])
 
 mh = MinHashLSH(inputCol="features", outputCol="hashes", numHashTables=5)
 model = mh.fit(dfA)
@@ -39,4 +41,4 @@ dfa = model.transform(dfA)
 # It may return less than 2 rows when not enough approximate near-neighbor candidates are
 # found.
 print("Approximately searching dfA for 2 nearest neighbors of the key:")
-model.approxNearestNeighbors(dfA, key, 2).show()
+model.approxNearestNeighbors(dfA, key, 4).show()
