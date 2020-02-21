@@ -5,6 +5,9 @@ from pyspark.sql.functions import *
 from pyspark.ml.linalg import Vectors
 from pyspark.sql.types import *
 from pyspark.ml.feature import Tokenizer, StopWordsRemover, CountVectorizer, Word2Vec, MinHashLSH
+
+from pyspark.ml import Pipeline
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from operator import itemgetter
 import math
 import builtins
@@ -16,11 +19,9 @@ spark.sparkContext.setLogLevel("OFF")
 
 proc_data = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'))
 
-test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
-
 TOTAL_AMOUNT = len(proc_data.target)
 # TEST_AMOUNT = TOTAL_AMOUNT/3
-TEST_AMOUNT = 100
+TEST_AMOUNT = 10
 
 # k parameter for A-NN
 K_VALUE = 5
@@ -36,14 +37,16 @@ def vectorizeDF(raw):
   raw = raw.withColumn('id', monotonically_increasing_id())
 
   tokenizer = Tokenizer(inputCol='data', outputCol='tokens')
-  tok_data = tokenizer.transform(raw)
+  # tok_data = tokenizer.transform(raw)
 
   swremover = StopWordsRemover(inputCol='tokens', outputCol='words')
-  rm_data = swremover.transform(tok_data)
+  # rm_data = swremover.transform(tok_data)
 
   cv = CountVectorizer(inputCol='words', outputCol='features', vocabSize=1000)
-  cvmodel = cv.fit(rm_data)
-  feat_data = cvmodel.transform(rm_data)
+  # cvmodel = cv.fit(rm_data)
+
+  pipeline = Pipeline(stages=[tokenizer,swremover,cv])
+  feat_data = pipeline.fit(dataset=raw).transform(raw)
   checkZero = udf(lambda V: V.numNonzeros() > 0, BooleanType())
 
   feat_data = feat_data.filter(checkZero(col('features')))
@@ -89,8 +92,7 @@ def distAux(keyFeat):
 
 
 def A_NN(test_values, train_dataframe):
-  true_positives = 0
-  false_negatives = 0
+  predictionsAndLabels = []
   for value in test_values:
     value = extractValues(value)
 
@@ -108,18 +110,15 @@ def A_NN(test_values, train_dataframe):
           votes[target] = 1
         else:
           votes[target] += 1
-
       # max builtin was overwritten by a pyspark module, too lazy to find which
       selectedTarget = builtins.max(votes.items(), key = itemgetter(1))[0]
-      # print('Classificação: {}'.format(selectedTarget))
-      if(selectedTarget == value['target']):
-        # print('Hit')
-        true_positives += 1
-      else:
-        # print('Miss')
-        false_negatives += 1
-  # precision = true_positives/(true_positives+false_positives)
-  # recall = true_positives/(true_positives)
-      print(true_positives/(false_negatives+true_positives))
+      predictionsAndLabels.append((selectedTarget, value['target']))
+  metricsDf = spark.createDataFrame(predictionsAndLabels,['pred','label'])
+  metricsDf = metricsDf.withColumn('newPred', metricsDf.pred.cast(DoubleType()))
+  metrics = MulticlassClassificationEvaluator(predictionCol='newPred', labelCol='label')
+  print('precision: ', metrics.evaluate(metricsDf, {metrics.metricName :'weightedPrecision'}))
+  print('recall: ', metrics.evaluate(metricsDf, {metrics.metricName :'weightedRecall'}))
+  print('F1: ', metrics.evaluate(metricsDf,{metrics.metricName :'f1'}))
+
 
 A_NN(test_values,train)
