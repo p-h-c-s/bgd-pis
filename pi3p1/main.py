@@ -1,26 +1,36 @@
 from sklearn.datasets import fetch_20newsgroups
 from pyspark.sql import SparkSession
+from pyspark import SparkConf
 from pyspark.sql.functions import *
 from pyspark.ml.linalg import Vectors
 from pyspark.sql.types import *
 from pyspark.ml.feature import Tokenizer, StopWordsRemover, CountVectorizer, Word2Vec, MinHashLSH
+from operator import itemgetter
 import math
+import builtins
 
-from pprint import pprint
-# os indices estão alinhados: o valor data[1] e o filename[1] com o target[1]
-
-spark = SparkSession.builder.appName('bgd').master('local').getOrCreate()
+conf = SparkConf()
+conf.set('spark.logConf', 'true')
+spark = SparkSession.builder.config(conf=conf).appName('bgd').getOrCreate()
+spark.sparkContext.setLogLevel("OFF")
 
 proc_data = fetch_20newsgroups(subset='all', remove=('headers', 'footers', 'quotes'))
 
 test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quotes'))
 
-maxI = 100
-minI = 90
+TOTAL_AMOUNT = len(proc_data.target)
+# TEST_AMOUNT = TOTAL_AMOUNT/3
+TEST_AMOUNT = 10
+
+# k parameter for A-NN
+K_VALUE = 5
+
+# parameter for minhashlsh
+NUM_HASH_TABLES = 5
+
 raw_groups = list(zip(proc_data.data, proc_data.target.tolist()))
 raw_groups[:] = [x for x in raw_groups if (len(x[0].replace('\n', '')) > 0)]
 
-# min 246 max 250
 def vectorizeDF(raw):
   raw = spark.createDataFrame(raw_groups, schema=['data', 'target'])
   raw = raw.withColumn('id', monotonically_increasing_id())
@@ -31,7 +41,7 @@ def vectorizeDF(raw):
   swremover = StopWordsRemover(inputCol='tokens', outputCol='words')
   rm_data = swremover.transform(tok_data)
 
-  cv = CountVectorizer(inputCol='words', outputCol='features', vocabSize=10)
+  cv = CountVectorizer(inputCol='words', outputCol='features', vocabSize=1000)
   cvmodel = cv.fit(rm_data)
   feat_data = cvmodel.transform(rm_data)
   checkZero = udf(lambda V: V.numNonzeros() > 0, BooleanType())
@@ -39,40 +49,31 @@ def vectorizeDF(raw):
   feat_data = feat_data.filter(checkZero(col('features')))
   return feat_data
 
+# create dataframe from raw data
 train = vectorizeDF(proc_data)
 
-mh = MinHashLSH(inputCol='features', outputCol='hashes', numHashTables=1, seed = 12345)
+# Create LSH model
+mh = MinHashLSH(inputCol='features', outputCol='hashes', numHashTables=NUM_HASH_TABLES, seed = 5123)
 model = mh.fit(train)
 train = model.transform(train)
 
 extractExploded = udf(lambda l: float(l[0]), FloatType())
-# extract hash values from matrix
 train = train.select('id', 'features', 'target', explode('hashes').alias('hashes'))
-# cast hash values to float then extract from denseVector
 train = train.withColumn('extracted', extractExploded(col('hashes')))
 
-# ideia - > inserir as keys de treino no vetor de train. Mas na hora de calcular a keyDist separar (so para ter um hash)
+# split data in the ratio: 5 train to 1 test
+train,teste = train.randomSplit([5.0, 1.0], 24)
 
-teste = train.select('id','features', 'extracted', 'target').where('id < 5')
-print('dados de teste')
-teste.show()
+# helper function to extract values from a ROW
+def extractValues(test_value):
+  values = {}
+  values['id'] = test_value['id']
+  values['target'] = test_value['target']
+  values['features'] = test_value['features']
+  values['extracted'] = test_value['extracted']
+  return values
 
-train = train.select('id', 'features', 'extracted', 'target').where('id >= 5')
-print('dados de treino')
-train.show()
-
-teste_1 = teste.take(1)
-teste_1_feat = teste_1[0]['features']
-teste_1 = float(teste_1[0]['extracted'])
-
-print(teste_1_feat)
-print(teste_1)
-
-
-print('hashEncounters com {}'.format(teste_1))
-# assumindo que o spark sabe comparar floats de maneira decente
-hashEncounters = train.where('extracted == {}'.format(teste_1))
-
+test_values = teste.take(TEST_AMOUNT)
 
 # ver se tem pelo menos um hash igual. se tiver, usar a keyDist
 # vect2 por exemplo e o vetor de teste
@@ -86,11 +87,38 @@ def keyDist(vect1, vect2):
 def distAux(keyFeat):
   return udf(lambda l: keyDist(l, keyFeat), DoubleType())
 
-dists = hashEncounters.withColumn('distCol', distAux(teste_1_feat)(col('features')))
 
-dists.show()
+def A_NN(test_values, train_dataframe):
+  true_positives = 0
+  false_negatives = 0
+  for value in test_values:
+    value = extractValues(value)
 
-# fluxo: 
-#   1 - testar se tem pelo menos um hash igual em hashes
-#   2 - Calcular a distância com keyDist em cima de features
-#   3 - A distância diz quao proximo é. O k do KNN diz quantos mais próximos vão determinar a classe
+    # assumindo que o spark sabe comparar floats de maneira decente
+    hashEncounters = train_dataframe.where('extracted == {}'.format(value['extracted']))
+
+    print('A-NN para a entrada de teste de id: {} com target: {}'.format(value['id'], value['target']))
+    dists = hashEncounters.withColumn('distCol', distAux(value['features'])(col('features')))
+    topK = dists.orderBy(col('distCol').desc()).limit(K_VALUE)
+    predictedList = topK.select('target').collect()
+    votes = {}
+    for target in predictedList[0]:
+      if(target not in votes):
+        votes[target] = 1
+      else:
+        votes[target] += 1
+
+    # max builtin was overwritten by a pyspark module, too lazy to find which
+    selectedTarget = builtins.max(votes.items(), key = itemgetter(1))[0]
+    print('Classificação: {}'.format(selectedTarget))
+    if(selectedTarget == value['target']):
+      print('Hit')
+      true_positives += 1
+    else:
+      print('Miss')
+      false_negatives += 1
+  # precision = true_positives/(true_positives+false_positives)
+  # recall = true_positives/(true_positives)
+  print(true_positives/(false_negatives+true_positives))
+
+A_NN(test_values,train)
