@@ -17,8 +17,7 @@ test_data = fetch_20newsgroups(subset='test', remove=('headers', 'footers', 'quo
 
 maxI = 100
 minI = 90
-# o erro acontece em posicoes que foram filtradas???????????????????????????
-raw_groups = list(zip(proc_data.data[minI:maxI], proc_data.target.tolist()[minI:maxI]))
+raw_groups = list(zip(proc_data.data, proc_data.target.tolist()))
 raw_groups[:] = [x for x in raw_groups if (len(x[0].replace('\n', '')) > 0)]
 
 # min 246 max 250
@@ -40,34 +39,19 @@ def vectorizeDF(raw):
   feat_data = feat_data.filter(checkZero(col('features')))
   return feat_data
 
-
 train = vectorizeDF(proc_data)
-train.select('id', 'features').show()
-# teste = vectorizeDF(test_data)
 
-
-# # feat_data.select('rawFeatures', 'target').show()
 mh = MinHashLSH(inputCol='features', outputCol='hashes', numHashTables=1, seed = 12345)
 model = mh.fit(train)
 train = model.transform(train)
 
 extractExploded = udf(lambda l: float(l[0]), FloatType())
 # extract hash values from matrix
-train = train.select('id', 'features', 'target',  explode('hashes').alias('hashes'))
+train = train.select('id', 'features', 'target', explode('hashes').alias('hashes'))
 # cast hash values to float then extract from denseVector
 train = train.withColumn('extracted', extractExploded(col('hashes')))
 
-
-
-# # dataA = [(0, Vectors.sparse(10,[0,2,3,5,6,8,9],[7.0,4.0,3.0,2.0,1.0,2.0,2.0]),),
-# #          (2, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
-# #          (3, Vectors.sparse(10,[0,1,6],[5.0,1.0,1.0]),),
-# #          (4, Vectors.sparse(10,[0,1,4,7],[29.0,4.0,3.0,2.0]),)]
-# # dfA = spark.createDataFrame(dataA, ["id", "features"])
-
-
-# # ideia - > inserir as keys de treino no vetor de train. Mas na hora de calcular a keyDist separar (so para ter um hash)
-# # key = Vectors.sparse(10,[0],[9.0])
+# ideia - > inserir as keys de treino no vetor de train. Mas na hora de calcular a keyDist separar (so para ter um hash)
 
 teste = train.select('id','features', 'extracted', 'target').where('id < 5')
 print('dados de teste')
@@ -88,7 +72,6 @@ print(teste_1)
 print('hashEncounters com {}'.format(teste_1))
 # assumindo que o spark sabe comparar floats de maneira decente
 hashEncounters = train.where('extracted == {}'.format(teste_1))
-hashEncounters.show()
 
 
 # ver se tem pelo menos um hash igual. se tiver, usar a keyDist
@@ -96,9 +79,9 @@ hashEncounters.show()
 def keyDist(vect1, vect2):
   set1 = set(vect1)
   set2 = set(vect2)
-  intersect = float(len(set1.intersection(set2)))
-  union = float(len(set1.union(set2)) - intersect)
-  return 1 - intersect/union
+  intersectSize = len(set1.intersection(set2))
+  union = float(len(set1) + len(set2) - intersectSize)
+  return 1 - intersectSize/union
 
 def distAux(keyFeat):
   return udf(lambda l: keyDist(l, keyFeat), DoubleType())
