@@ -1,7 +1,7 @@
 import redis
 import json
 
-r = redis.Redis()
+r = redis.Redis(decode_responses=True)
 
 # produto a procurar os similares com maior venda
 product = 'B00004R99S'
@@ -9,7 +9,7 @@ product = 'B00004R99S'
 def getProductByKey(key, redisInstance):
   raw_data = redisInstance.get(key)
   if (raw_data != None):
-    return json.loads(raw_data.decode('utf-8'))
+    return json.loads(raw_data)
   return None
 
 def getSpecificFields(product, fields=['ASIN']):
