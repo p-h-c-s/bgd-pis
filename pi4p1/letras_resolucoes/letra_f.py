@@ -19,18 +19,17 @@ def getSpecificFields(product, fields=['ASIN']):
     return new_prd
   return None
 
-def getTopN(groups):
-  for group in groups:
-    print('\n10 produtos líderes de venda (menor salesrank) em {}:'.format(group))
-    print('-----------------------------------------------------')
-    topN = heapq.nsmallest(10, groupSet[group], itemgetter(1))
-    for prd in topN:
-      print('ASIN: {} com salesrank {}'.format(prd[0], prd[1]))
-    print('-----------------------------------------------------')
+def getTopN_F(groups):
+  print('\n5 categorias com maior média de avaliações úteis positivas')
+  print('-----------------------------------------------------')
+  topN = heapq.nlargest(5, groupSet, itemgetter(1))
+  for prd in topN:
+    print('Category: {} com média: {}'.format(prd, groups[prd]))
+  print('-----------------------------------------------------')
 
 def getLeafCat(categories):
   if (len(categories) > 0):
-    return categories[0].strip().split('|')[1].split('[')[0]
+    return categories[0].strip().split('|')[1]
   return None
 
 def calcAverage(reviews):
@@ -50,12 +49,12 @@ while cursor != 0:
   cursor, keys = r.scan(cursor=cursor, count=100)
   for key in keys:
     value = getProductByKey(key, r)
-    category = getLeafCat(value['categories'])
-    if category not in groupSet and category != None:
-      groupSet[category] = calcAverage(value['reviews'])
-    elif(category != None):
-      groupSet[category] = (calcAverage(value['reviews']) + groupSet[category])/2
-
+    categories = value['categories']
+    for cat in categories:
+      if cat not in groupSet and cat != None:
+        groupSet[cat] = calcAverage(value['reviews'])
+      elif(cat != None):
+        groupSet[cat] = (calcAverage(value['reviews']) + groupSet[cat])/2
 
 print('Letra f)')
-print(groupSet)
+getTopN_F(groupSet)
