@@ -19,13 +19,13 @@ def getSpecificFields(product, fields=['ASIN']):
     return new_prd
   return None
 
-def getTopN(groups):
+def getTopN_G(groups):
   for group in groups:
-    print('\n10 produtos líderes de venda (menor salesrank) em {}:'.format(group))
+    print('\n10 clientes com mais comentários em {}:'.format(group))
     print('-----------------------------------------------------')
-    topN = heapq.nsmallest(10, groupSet[group], key=itemgetter(1))
+    topN = heapq.nlargest(10, groupSet[group], key=groupSet[group].get)
     for prd in topN:
-      print('ASIN: {} com salesrank {}'.format(prd[0], prd[1]))
+      print('Customer: {} com {} comentarios'.format(prd, groupSet[group][prd]))
     print('-----------------------------------------------------')
 
 groupSet = {}
@@ -34,12 +34,13 @@ while cursor != 0:
   cursor, keys = r.scan(cursor=cursor, count=100)
   for key in keys:
     value = getProductByKey(key, r)
-    if value['group'] not in groupSet and value['salesrank'] != -1:
-      # initialize heap then push to it
-      groupSet[value['group']] = []
-      heapq.heappush(groupSet[value['group']], (value['ASIN'], value['salesrank']))
-    elif(value['salesrank'] != -1):
-      heapq.heappush(groupSet[value['group']], (value['ASIN'], value['salesrank']))
+    if value['group'] not in groupSet :
+      groupSet[value['group']] = {}
+    for review in value['reviews']:
+      if review['customer'] not in groupSet[value['group']]:
+        groupSet[value['group']][review['customer']] = 1
+      else:
+        groupSet[value['group']][review['customer']] += 1
 
 print('Letra d)')
-getTopN(groupSet)
+getTopN_G(groupSet)
